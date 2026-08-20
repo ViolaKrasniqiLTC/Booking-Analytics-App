@@ -15,10 +15,6 @@ export function registerAddToCart({ analytics, browser, init, settings }) {
     shopifyEmail: init.data.customer?.email ?? null,
   });
 
-  analytics.subscribe("page_viewed", (event) => {
-    console.log("Page viewed", event);
-  });
-
   analytics.subscribe(CUSTOM_EVENTS.customerIdentified, (event) => {
     emailFromCustomEvent = event.customData?.email || null;
     customerIdFromCustomEvent = event.customData?.customer_id || null;

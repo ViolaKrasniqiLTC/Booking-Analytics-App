@@ -55,7 +55,7 @@ function buildSettings(shop, appUrl) {
 
   return {
     accountID,
-    apiEndpoint: appUrl,
+    apiUrl: appUrl,
   };
 }
 
@@ -91,7 +91,7 @@ async function updateWebPixel(admin, id, settings) {
     return false;
   }
 
-  console.log("[web-pixel] updated apiEndpoint to", settings.apiEndpoint);
+  console.log("[web-pixel] updated apiUrl to", settings.apiUrl);
   return true;
 }
 
@@ -111,7 +111,7 @@ async function createWebPixel(admin, settings) {
     return false;
   }
 
-  console.log("[web-pixel] created with apiEndpoint", settings.apiEndpoint);
+  console.log("[web-pixel] created with apiUrl", settings.apiUrl);
   return true;
 }
 
@@ -131,7 +131,7 @@ export async function syncWebPixel(admin, shop) {
   if (existing) {
     const current = parseSettings(existing.settings);
 
-    if (current.apiEndpoint === appUrl) {
+    if (current.apiUrl === appUrl && current.accountID === settings.accountID) {
       return;
     }
 

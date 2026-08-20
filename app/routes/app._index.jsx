@@ -3,11 +3,11 @@ import { useEffect, useState } from "react";
 import { useLoaderData, useSearchParams } from "react-router";
 import { supabase } from "../lib/supabase.server";
 import { authenticate } from "../shopify.server";
-import { ensureWebPixel } from "../lib/ensure-web-pixel.server";
+import { syncWebPixel } from "../lib/web-pixel.server";
 
 export async function loader({ request }) {
-  const { admin } = await authenticate.admin(request);
-  await ensureWebPixel(admin);
+  const { admin, session } = await authenticate.admin(request);
+  await syncWebPixel(admin, session.shop);
 
   const url = new URL(request.url);
   const email = url.searchParams.get("email")?.trim() || "";

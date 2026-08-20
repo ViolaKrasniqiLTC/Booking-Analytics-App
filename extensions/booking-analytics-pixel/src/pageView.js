@@ -1,24 +1,25 @@
-function getPageUrl(init, event) {
-  try {
-    return (
-      init?.context?.document?.location?.href ??
-      event?.context?.document?.location?.href ??
-      null
-    );
-  } catch {
-    return null;
-  }
-}
+import { CUSTOM_EVENTS } from "./events";
 
 export function setupPageViewTracking(analytics, init, settings) {
-  analytics.subscribe("page_viewed", (event) => {
+  console.log("Listening for page views via", CUSTOM_EVENTS.customerIdentified);
+
+  analytics.subscribe(CUSTOM_EVENTS.customerIdentified, (event) => {
+    const customData = event.customData ?? {};
     const customer = init?.data?.customer ?? null;
-    const pageUrl = getPageUrl(init, event);
+
+    const customerEmail = customData.email ?? customer?.email ?? null;
+    const customerId = customData.customer_id ?? customer?.id ?? null;
+    const pageUrl =
+      customData.page_url ??
+      init?.context?.document?.location?.href ??
+      event?.context?.document?.location?.href ??
+      null;
 
     console.log("Page viewed", {
       url: pageUrl,
-      customerEmail: customer?.email ?? null,
-      customerId: customer?.id ?? null,
+      customerEmail,
+      customerId,
+      template: customData.template ?? null,
       eventId: event.id,
     });
 
@@ -28,22 +29,23 @@ export function setupPageViewTracking(analytics, init, settings) {
     }
 
     fetch(`${settings.apiUrl}/api/analytics`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          event_type: "page_viewed",
-          customer_id: customer?.id ?? null,
-          customer_email: customer?.email ?? null,
-          session_id: event.clientId,
-          page_url: pageUrl,
-          metadata: {
-            event_id: event.id,
-            timestamp: event.timestamp,
-          },
-        }),
-        keepalive: true,
-      }).catch((error) => {
-        console.log("Failed to send page view", error);
-      });
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event_type: "page_viewed",
+        customer_id: customerId,
+        customer_email: customerEmail,
+        session_id: event.clientId,
+        page_url: pageUrl,
+        metadata: {
+          event_id: event.id,
+          timestamp: event.timestamp,
+          template: customData.template ?? null,
+        },
+      }),
+      keepalive: true,
+    }).catch((error) => {
+      console.log("Failed to send page view", error);
+    });
   });
 }

@@ -25,6 +25,7 @@
       }
 
       window.bookingAnalytics.publish("booking_analytics:customer_identified");
+      console.log("[booking-analytics] published customer_identified", customer);
     }
 
     publishWhenReady();
