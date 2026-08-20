@@ -1,4 +1,5 @@
 import { json } from "@remix-run/node";
+import { useEffect, useState } from "react";
 import { useLoaderData, useSearchParams } from "react-router";
 import { supabase } from "../lib/supabase.server";
 import { authenticate } from "../shopify.server";
@@ -56,23 +57,36 @@ export async function loader({ request }) {
 
 export default function AnalyticsDashboard() {
   const { events, stats, email } = useLoaderData();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [, setSearchParams] = useSearchParams();
+  const [searchEmail, setSearchEmail] = useState(email);
+
+  useEffect(() => {
+    setSearchEmail(email);
+  }, [email]);
+
+  function updateEmailParam(emailValue) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      const trimmed = emailValue.trim();
+
+      if (trimmed) {
+        next.set("email", trimmed);
+      } else {
+        next.delete("email");
+      }
+
+      return next;
+    });
+  }
 
   function handleSearch(event) {
     event.preventDefault();
-
-    const formData = new FormData(event.currentTarget);
-    const emailValue = formData.get("email");
-
-    if (emailValue) {
-      setSearchParams({ email: emailValue });
-    } else {
-      setSearchParams({});
-    }
+    updateEmailParam(searchEmail);
   }
 
   function clearFilter() {
-    setSearchParams({});
+    setSearchEmail("");
+    updateEmailParam("");
   }
 
   return (
@@ -90,7 +104,8 @@ export default function AnalyticsDashboard() {
               <s-text-field
                 name="email"
                 label="Customer email"
-                value={email}
+                value={searchEmail}
+                onInput={(event) => setSearchEmail(event.currentTarget.value)}
                 placeholder="customer@example.com"
               />
 
@@ -155,7 +170,7 @@ export default function AnalyticsDashboard() {
             No analytics events found.
           </s-banner>
         ) : (
-          <s-table>
+          <s-table variant="auto">
             <s-table-header-row>
 
               <s-table-header listSlot="primary">
@@ -176,29 +191,31 @@ export default function AnalyticsDashboard() {
 
             </s-table-header-row>
 
-            {events.map((event) => (
-              <s-table-row key={event.id}>
+            <s-table-body>
+              {events.map((event, index) => (
+                <s-table-row key={event.id ?? `${event.created_at}-${index}`}>
 
-                <s-table-cell>
-                  {formatEventName(event.event_type)}
-                </s-table-cell>
+                  <s-table-cell>
+                    {formatEventName(event.event_type)}
+                  </s-table-cell>
 
-                <s-table-cell>
-                  {event.customer_email || "Anonymous"}
-                </s-table-cell>
+                  <s-table-cell>
+                    {event.customer_email || "Anonymous"}
+                  </s-table-cell>
 
-                <s-table-cell>
-                  {event.page_url ||
-                    event.product_title ||
-                    "—"}
-                </s-table-cell>
+                  <s-table-cell>
+                    {event.page_url ||
+                      event.product_title ||
+                      "—"}
+                  </s-table-cell>
 
-                <s-table-cell>
-                  {formatDate(event.created_at)}
-                </s-table-cell>
+                  <s-table-cell>
+                    {formatDate(event.created_at)}
+                  </s-table-cell>
 
-              </s-table-row>
-            ))}
+                </s-table-row>
+              ))}
+            </s-table-body>
 
           </s-table>
         )}
