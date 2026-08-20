@@ -27,9 +27,9 @@ export function registerAddToCart({ analytics, browser, init, settings }) {
   analytics.subscribe(CUSTOM_EVENTS.productAddedToCart, async (event) => {
     const cartLine = event.data?.cartLine;
     const shopifyEmail = init.data.customer?.email || null;
-    const customerEmail = shopifyEmail || emailFromCustomEvent;
+    const customerEmail = emailFromCustomEvent || shopifyEmail;
     const customerId =
-      init.data.customer?.id || customerIdFromCustomEvent || null;
+      customerIdFromCustomEvent || init.data.customer?.id || null;
     const cartId = await resolveCartId({ event, browser, init });
 
     console.log("Add to cart email check", {
@@ -67,11 +67,11 @@ export function registerAddToCart({ analytics, browser, init, settings }) {
       event_type: "checkout_started",
       store_event: false,
       customer_id:
+        customerIdFromCustomEvent ||
         init.data.customer?.id ||
         checkout?.order?.customer?.id ||
-        customerIdFromCustomEvent ||
         null,
-      customer_email: shopifyEmail || checkoutEmail || emailFromCustomEvent,
+      customer_email: emailFromCustomEvent || checkoutEmail || shopifyEmail,
       session_id: event.clientId,
       page_url: event.context?.window?.location?.href,
       cart_id: cartId,
