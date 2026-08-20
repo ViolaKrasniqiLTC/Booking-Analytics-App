@@ -1,8 +1,13 @@
 import { json } from "@remix-run/node";
 import { useLoaderData, useSearchParams } from "react-router";
 import { supabase } from "../lib/supabase.server";
+import { authenticate } from "../shopify.server";
+import { ensureWebPixel } from "../lib/ensure-web-pixel.server";
 
 export async function loader({ request }) {
+  const { admin } = await authenticate.admin(request);
+  await ensureWebPixel(admin);
+
   const url = new URL(request.url);
   const email = url.searchParams.get("email")?.trim() || "";
 

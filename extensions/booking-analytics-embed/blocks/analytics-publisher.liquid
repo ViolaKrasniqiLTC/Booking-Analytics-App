@@ -1,0 +1,40 @@
+<script>
+  (function () {
+    var customer = {
+      email: {{ customer.email | json }},
+      customer_id: {{ customer.id | json }},
+      page_url: {{ canonical_url | json }},
+      template: {{ template.name | json }}
+    };
+
+    window.bookingAnalytics = window.bookingAnalytics || {};
+    window.bookingAnalytics.customer = customer;
+    window.bookingAnalytics.publish = function (eventName, extra) {
+      var payload = Object.assign({}, customer, extra || {});
+      return Shopify.analytics.publish(eventName, payload);
+    };
+
+    function publishWhenReady() {
+      if (
+        !window.Shopify ||
+        !Shopify.analytics ||
+        typeof Shopify.analytics.publish !== "function"
+      ) {
+        setTimeout(publishWhenReady, 50);
+        return;
+      }
+
+      window.bookingAnalytics.publish("booking_analytics:customer_identified");
+    }
+
+    publishWhenReady();
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Customer identity",
+  "target": "body",
+  "settings": []
+}
+{% endschema %}
