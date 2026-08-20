@@ -1,0 +1,16 @@
+name = "booking-analytics-pixel"
+type = "web_pixel_extension"
+uid = "5c44458e-f1ae-d153-b244-69024dcf5805b81459de"
+
+runtime_context = "strict"
+
+[settings]
+type = "object"
+
+[settings.fields.accountID]
+name = "Account ID"
+description = "Account ID"
+type = "single_line_text_field"
+validations =  [
+  { name = "min", value = "1" }
+]
