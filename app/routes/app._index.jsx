@@ -5,24 +5,82 @@ import { supabase } from "../lib/supabase.server";
 import { authenticate } from "../shopify.server";
 import { syncWebPixel } from "../lib/web-pixel.server";
 
+const PAGE_SIZE = 10;
+
+function applyEmailFilter(query, email) {
+  if (email) {
+    return query.ilike("customer_email", `%${email}%`);
+  }
+
+  return query;
+}
+
+async function countEvents(email, eventType) {
+  let query = supabase
+    .from("analytics_events")
+    .select("*", { count: "exact", head: true });
+
+  query = applyEmailFilter(query, email);
+
+  if (eventType) {
+    query = query.eq("event_type", eventType);
+  }
+
+  const { count, error } = await query;
+
+  if (error) {
+    throw error;
+  }
+
+  return count ?? 0;
+}
+
 export async function loader({ request }) {
   const { admin, session } = await authenticate.admin(request);
   await syncWebPixel(admin, session.shop);
 
   const url = new URL(request.url);
   const email = url.searchParams.get("email")?.trim() || "";
+  const requestedPage = Number.parseInt(url.searchParams.get("page") ?? "1", 10);
+  const requestedPageNumber =
+    Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
 
-  let query = supabase
+  let countQuery = supabase
+    .from("analytics_events")
+    .select("*", { count: "exact", head: true });
+
+  countQuery = applyEmailFilter(countQuery, email);
+
+  const { count: totalCount, error: countError } = await countQuery;
+
+  if (countError) {
+    console.error("Supabase error:", countError);
+
+    throw new Response("Failed to load analytics", {
+      status: 500,
+    });
+  }
+
+  const totalPages = Math.max(1, Math.ceil((totalCount ?? 0) / PAGE_SIZE));
+  const page = Math.min(requestedPageNumber, totalPages);
+  const from = (page - 1) * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+
+  let eventsQuery = supabase
     .from("analytics_events")
     .select("*")
     .order("created_at", { ascending: false })
-    .limit(100);
+    .range(from, to);
 
-  if (email) {
-    query = query.ilike("customer_email", `%${email}%`);
-  }
+  eventsQuery = applyEmailFilter(eventsQuery, email);
 
-  const { data: events, error } = await query;
+  const [{ data: events, error }, pageViews, addToCart, checkoutAbandoned] =
+    await Promise.all([
+      eventsQuery,
+      countEvents(email, "page_viewed"),
+      countEvents(email, "product_added_to_cart"),
+      countEvents(email, "checkout_abandoned"),
+    ]);
 
   if (error) {
     console.error("Supabase error:", error);
@@ -32,31 +90,25 @@ export async function loader({ request }) {
     });
   }
 
-  const pageViews = events.filter(
-    (event) => event.event_type === "page_viewed"
-  ).length;
-
-  const addToCart = events.filter(
-    (event) => event.event_type === "product_added_to_cart"
-  ).length;
-
-  const checkoutAbandoned = events.filter(
-    (event) => event.event_type === "checkout_abandoned"
-  ).length;
-
   return json({
-    events,
+    events: events ?? [],
     stats: {
       pageViews,
       addToCart,
       checkoutAbandoned,
     },
     email,
+    pagination: {
+      page,
+      pageSize: PAGE_SIZE,
+      totalCount: totalCount ?? 0,
+      totalPages,
+    },
   });
 }
 
 export default function AnalyticsDashboard() {
-  const { events, stats, email } = useLoaderData();
+  const { events, stats, email, pagination } = useLoaderData();
   const [, setSearchParams] = useSearchParams();
   const [searchEmail, setSearchEmail] = useState(email);
 
@@ -64,9 +116,16 @@ export default function AnalyticsDashboard() {
     setSearchEmail(email);
   }, [email]);
 
-  function updateEmailParam(emailValue) {
+  function updateSearchParams(updater) {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
+      updater(next);
+      return next;
+    });
+  }
+
+  function updateEmailParam(emailValue) {
+    updateSearchParams((next) => {
       const trimmed = emailValue.trim();
 
       if (trimmed) {
@@ -75,7 +134,17 @@ export default function AnalyticsDashboard() {
         next.delete("email");
       }
 
-      return next;
+      next.delete("page");
+    });
+  }
+
+  function goToPage(nextPage) {
+    updateSearchParams((next) => {
+      if (nextPage <= 1) {
+        next.delete("page");
+      } else {
+        next.set("page", String(nextPage));
+      }
     });
   }
 
@@ -170,54 +239,82 @@ export default function AnalyticsDashboard() {
             No analytics events found.
           </s-banner>
         ) : (
-          <s-table variant="auto">
-            <s-table-header-row>
+          <s-stack direction="block" gap="base">
+            <s-table variant="auto">
+              <s-table-header-row>
 
-              <s-table-header listSlot="primary">
-                Event
-              </s-table-header>
+                <s-table-header listSlot="primary">
+                  Event
+                </s-table-header>
 
-              <s-table-header>
-                Customer
-              </s-table-header>
+                <s-table-header>
+                  Customer
+                </s-table-header>
 
-              <s-table-header>
-                Page / Product
-              </s-table-header>
+                <s-table-header>
+                  Page / Product
+                </s-table-header>
 
-              <s-table-header>
-                Date
-              </s-table-header>
+                <s-table-header>
+                  Date
+                </s-table-header>
 
-            </s-table-header-row>
+              </s-table-header-row>
 
-            <s-table-body>
-              {events.map((event, index) => (
-                <s-table-row key={event.id ?? `${event.created_at}-${index}`}>
+              <s-table-body>
+                {events.map((event, index) => (
+                  <s-table-row key={event.id ?? `${event.created_at}-${index}`}>
 
-                  <s-table-cell>
-                    {formatEventName(event.event_type)}
-                  </s-table-cell>
+                    <s-table-cell>
+                      {formatEventName(event.event_type)}
+                    </s-table-cell>
 
-                  <s-table-cell>
-                    {event.customer_email || "Anonymous"}
-                  </s-table-cell>
+                    <s-table-cell>
+                      {event.customer_email || "Anonymous"}
+                    </s-table-cell>
 
-                  <s-table-cell>
-                    {event.page_url ||
-                      event.product_title ||
-                      "—"}
-                  </s-table-cell>
+                    <s-table-cell>
+                      {event.page_url ||
+                        event.product_title ||
+                        "—"}
+                    </s-table-cell>
 
-                  <s-table-cell>
-                    {formatDate(event.created_at)}
-                  </s-table-cell>
+                    <s-table-cell>
+                      {formatDate(event.created_at)}
+                    </s-table-cell>
 
-                </s-table-row>
-              ))}
-            </s-table-body>
+                  </s-table-row>
+                ))}
+              </s-table-body>
 
-          </s-table>
+            </s-table>
+
+            {pagination.totalPages > 1 && (
+              <s-stack direction="inline" gap="base">
+                <s-button
+                  type="button"
+                  variant="secondary"
+                  disabled={pagination.page <= 1}
+                  onClick={() => goToPage(pagination.page - 1)}
+                >
+                  Previous
+                </s-button>
+
+                <s-text>
+                  Page {pagination.page} of {pagination.totalPages}
+                </s-text>
+
+                <s-button
+                  type="button"
+                  variant="secondary"
+                  disabled={pagination.page >= pagination.totalPages}
+                  onClick={() => goToPage(pagination.page + 1)}
+                >
+                  Next
+                </s-button>
+              </s-stack>
+            )}
+          </s-stack>
         )}
 
       </s-section>
