@@ -1,0 +1,16 @@
+name = "checkout-abandonment"
+type = "web_pixel_extension"
+uid = "72f0d4e1-7501-3824-267c-54aa3b49425fc6f0d874"
+
+runtime_context = "strict"
+
+[settings]
+type = "object"
+
+[settings.fields.accountID]
+name = "Account ID"
+description = "Account ID"
+type = "single_line_text_field"
+validations =  [
+  { name = "min", value = "1" }
+]
