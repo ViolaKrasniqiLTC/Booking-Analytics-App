@@ -7,7 +7,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-export function loader({ request }) {
+// Handles browser preflight (OPTIONS) before POST
+export async function loader({ request }) {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
@@ -55,7 +56,8 @@ export async function action({ request }) {
     }
 
     const shouldStoreEvent =
-      event.store_event !== false && event_type === "product_added_to_cart";
+      event.store_event !== false &&
+      (event_type === "product_added_to_cart" || event_type === "page_viewed");
 
     if (session_id && (cart_id || checkout_id || customer_email)) {
       const patch = {};
@@ -106,10 +108,7 @@ export async function action({ request }) {
     }
 
     return json(
-      {
-        success: true,
-        event: data,
-      },
+      { success: true, event: data },
       { headers: corsHeaders }
     );
   } catch (error) {
