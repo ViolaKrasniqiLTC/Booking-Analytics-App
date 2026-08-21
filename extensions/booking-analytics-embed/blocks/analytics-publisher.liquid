@@ -1,6 +1,6 @@
 <script>
   (function () {
-    var customer = {
+    let customer = {
       email: {{ customer.email | json }},
       customer_id: {{ customer.id | json }},
       page_url: {{ canonical_url | json }},
@@ -10,7 +10,7 @@
     window.bookingAnalytics = window.bookingAnalytics || {};
     window.bookingAnalytics.customer = customer;
     window.bookingAnalytics.publish = function (eventName, extra) {
-      var payload = Object.assign({}, customer, extra || {});
+      let payload = Object.assign({}, customer, extra || {});
       return Shopify.analytics.publish(eventName, payload);
     };
 
