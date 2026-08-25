@@ -1,107 +1,122 @@
 import { CUSTOM_EVENTS } from "./events";
 
-export function registerAddToCart({ analytics, browser, init, settings }) {
-  const apiUrl = settings.apiUrl;
+export function registerAddToCart({
+  analytics,
+  browser,
+  init,
+  settings,
+}) {
+  const apiUrl = settings?.apiUrl;
 
   if (!apiUrl) {
-    console.log("Pixel apiUrl setting is missing");
-  }
-
-  let emailFromCustomEvent = null;
-  let customerIdFromCustomEvent = null;
-
-  console.log("Pixel customer", {
-    customer: init.data.customer,
-    shopifyEmail: init.data.customer?.email ?? null,
-  });
-
-  analytics.subscribe(CUSTOM_EVENTS.customerIdentified, (event) => {
-    emailFromCustomEvent = event.customData?.email || null;
-    customerIdFromCustomEvent = event.customData?.customer_id || null;
-    console.log("Custom identity event", {
-      email: emailFromCustomEvent,
-      customer_id: customerIdFromCustomEvent,
-    });
-  });
-
-  analytics.subscribe(CUSTOM_EVENTS.productAddedToCart, async (event) => {
-    const cartLine = event.data?.cartLine;
-    const shopifyEmail = init.data.customer?.email || null;
-    const customerEmail = shopifyEmail || emailFromCustomEvent;
-    const customerId =
-      init.data.customer?.id || customerIdFromCustomEvent || null;
-    const cartId = await resolveCartId({ event, browser, init });
-
-    console.log("Add to cart email check", {
-      shopifyEmail,
-      emailFromCustomEvent,
-      using: customerEmail,
-      cartId,
-    });
-
-    sendEvent(apiUrl, {
-      event_type: CUSTOM_EVENTS.productAddedToCart,
-      customer_id: customerId,
-      customer_email: customerEmail,
-      session_id: event.clientId,
-      page_url: event.context?.window?.location?.href,
-      product_id: cartLine?.merchandise?.product?.id,
-      product_title: cartLine?.merchandise?.product?.title,
-      quantity: cartLine?.quantity,
-      cart_id: cartId,
-      checkout_id: null,
-      metadata: {
-        eventId: event.id,
-        timestamp: event.timestamp,
-      },
-    });
-  });
-
-  analytics.subscribe("checkout_started", async (event) => {
-    const checkout = event.data?.checkout;
-    const shopifyEmail = init.data.customer?.email || null;
-    const checkoutEmail = checkout?.email || null;
-    const cartId = await resolveCartId({ event, browser, init });
-
-    sendEvent(apiUrl, {
-      event_type: "checkout_started",
-      store_event: false,
-      customer_id:
-        init.data.customer?.id ||
-        checkout?.order?.customer?.id ||
-        customerIdFromCustomEvent ||
-        null,
-      customer_email: shopifyEmail || checkoutEmail || emailFromCustomEvent,
-      session_id: event.clientId,
-      page_url: event.context?.window?.location?.href,
-      cart_id: cartId,
-      checkout_id: checkout?.token || checkout?.id || null,
-      metadata: {
-        eventId: event.id,
-        timestamp: event.timestamp,
-      },
-    });
-  });
-}
-
-function sendEvent(apiUrl, payload) {
-  if (!apiUrl) {
+    console.error("Pixel apiUrl setting is missing");
     return;
   }
 
-  fetch(`${apiUrl}/api/analytics`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-    keepalive: true,
+  console.log("🟢 ADD TO CART TRACKING INITIALIZED");
+
+  analytics.subscribe("product_added_to_cart", async (event) => {
+    console.log("🔥 NATIVE PRODUCT ADDED TO CART", event);
+
+    try {
+      const cartLine = event.data?.cartLine;
+
+      const customerEmail =
+        init?.data?.customer?.email || null;
+
+      const customerId =
+        init?.data?.customer?.id || null;
+
+      const cartId = await resolveCartId({
+        event,
+        browser,
+        init,
+      });
+
+      const payload = {
+        event_type: "product_added_to_cart",
+
+        customer_id: customerId,
+
+        customer_email: customerEmail,
+
+        session_id: event.clientId || null,
+
+        page_url:
+          event.context?.window?.location?.href || null,
+
+        product_id:
+          cartLine?.merchandise?.product?.id || null,
+
+        product_title:
+          cartLine?.merchandise?.product?.title || null,
+
+        quantity:
+          cartLine?.quantity || null,
+
+        cart_id: cartId,
+
+        checkout_id: null,
+
+        metadata: {
+          event_id: event.id || null,
+          timestamp:
+            event.timestamp || new Date().toISOString(),
+          source: "shopify_product_added_to_cart",
+        },
+      };
+
+      console.log("📤 SENDING ADD TO CART", payload);
+
+      await sendEvent(apiUrl, payload);
+    } catch (error) {
+      console.error("❌ ADD TO CART ERROR", error);
+    }
   });
 }
-async function resolveCartId({ event, browser, init }) {
-  if (init.data.cart?.id) {
+
+async function sendEvent(apiUrl, payload) {
+  try {
+    const response = await fetch(
+      `${apiUrl}/api/analytics`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        keepalive: true,
+      }
+    );
+
+    const result = await response.json();
+
+    console.log("📥 API RESPONSE", result);
+
+    if (!response.ok) {
+      console.error("❌ ANALYTICS ERROR", result);
+      return;
+    }
+
+    console.log("✅ PRODUCT ADDED TO CART SENT");
+  } catch (error) {
+    console.error("❌ FETCH ERROR", error);
+  }
+}
+
+async function resolveCartId({
+  event,
+  browser,
+  init,
+}) {
+  if (init?.data?.cart?.id) {
     return init.data.cart.id;
   }
 
   try {
-    const cartCookie = await browser.cookie.get("cart");
+    const cartCookie =
+      await browser.cookie.get("cart");
+
     if (cartCookie) {
       return cartCookie;
     }
@@ -110,17 +125,26 @@ async function resolveCartId({ event, browser, init }) {
   }
 
   try {
-    const origin = event.context?.window?.location?.origin;
+    const origin =
+      event.context?.window?.location?.origin;
+
     if (!origin) {
       return null;
     }
 
-    const response = await fetch(`${origin}/cart.js`);
+    const response = await fetch(
+      `${origin}/cart.js`
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
     const cart = await response.json();
-    return cart.token || null;
+
+    return cart?.token || null;
   } catch (error) {
     console.log("Cart.js unavailable", error);
     return null;
   }
 }
-
